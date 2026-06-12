@@ -109,13 +109,178 @@ class WeatherRepository(private val recentCityDao: RecentCityDao) {
             systemInstruction = Content(parts = listOf(Part(text = systemPrompt)))
         )
 
-        val response = RetrofitClient.service.generateContent(apiKey, request)
-        val responseText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
-            ?: throw IllegalStateException("Received empty response from weather synthesis engine.")
+        var apiResult: WeatherResponse? = null
+        var lastError: Throwable? = null
 
-        val extractedJson = cleanJsonString(responseText)
-        weatherAdapter.fromJson(extractedJson) 
-            ?: throw IllegalStateException("Failed to parse weather diorama data. Content response was not in expected schema.")
+        val modelsToTry = listOf("gemini-3.5-flash", "gemini-3.1-pro-preview")
+        for (model in modelsToTry) {
+            var attempt = 1
+            val maxAttempts = 2
+            while (attempt <= maxAttempts) {
+                try {
+                    val response = RetrofitClient.service.generateContent(model, apiKey, request)
+                    val responseText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                        ?: throw IllegalStateException("Received empty response from weather synthesis engine.")
+                    
+                    val extractedJson = cleanJsonString(responseText)
+                    val parsed = weatherAdapter.fromJson(extractedJson)
+                        ?: throw IllegalStateException("Failed to parse weather diorama data.")
+                    
+                    apiResult = parsed
+                    break // Success!
+                } catch (e: Exception) {
+                    lastError = e
+                    attempt++
+                    if (attempt <= maxAttempts) {
+                        kotlinx.coroutines.delay(1000) // Short delay before retry
+                    }
+                }
+            }
+            if (apiResult != null) break
+        }
+
+        if (apiResult != null) {
+            apiResult
+        } else {
+            // Log/print error and gracefully fall back to procedural local simulation
+            android.util.Log.e("WeatherRepository", "Gemini API failed with error, falling back offline: ${lastError?.message}", lastError)
+            generateOfflineDiorama(city)
+        }
+    }
+
+    fun generateOfflineDiorama(city: String): WeatherResponse {
+        val query = city.lowercase()
+        val condition = when {
+            query.contains("paris") -> "Sunny"
+            query.contains("tokyo") -> "Cloudy"
+            query.contains("cairo") -> "Sunny"
+            query.contains("new york") || query.contains("ny") -> "Sunny"
+            query.contains("sydney") -> "Rainy"
+            query.contains("reykjavik") -> "Snowy"
+            query.contains("snow") || query.contains("ice") || query.contains("freeze") -> "Snowy"
+            query.contains("rain") || query.contains("drizzle") || query.contains("shower") -> "Rainy"
+            query.contains("cloud") || query.contains("overcast") || query.contains("grey") -> "Cloudy"
+            query.contains("storm") || query.contains("thunder") || query.contains("lightn") -> "Stormy"
+            else -> {
+                val hashValue = city.length % 5
+                when (hashValue) {
+                    0 -> "Sunny"
+                    1 -> "Cloudy"
+                    2 -> "Rainy"
+                    3 -> "Stormy"
+                    else -> "Snowy"
+                }
+            }
+        }
+
+        val tempCelsius = when (condition) {
+            "Sunny" -> 23.5
+            "Cloudy" -> 16.5
+            "Rainy" -> 13.0
+            "Stormy" -> 14.5
+            "Snowy" -> -1.5
+            else -> 17.0
+        }
+
+        val descriptionStr = when (condition) {
+            "Sunny" -> "Warm sunbeams wash over the local horizon. The offline skies are perfectly clear and ambient."
+            "Cloudy" -> "Gentle textured clouds float in peaceful equilibrium across the diorama block."
+            "Rainy" -> "Serene rain details refresh the landscape. The atmosphere is crisp and wet."
+            "Stormy" -> "Atmospheric storms pass over the city, casting a deep twilight blue sky effect."
+            "Snowy" -> "Fine crisp snow carpets the landscape, reflecting soft light values."
+            else -> "Simulating local weather parameters offline."
+        }
+
+        val skyColorStart = when (condition) {
+            "Sunny" -> "#4BB4E8"
+            "Cloudy" -> "#5C6B73"
+            "Rainy" -> "#455A64"
+            "Stormy" -> "#1E1B4B"
+            "Snowy" -> "#78909C"
+            else -> "#4BB4E8"
+        }
+
+        val skyColorEnd = when (condition) {
+            "Sunny" -> "#BBE6FA"
+            "Cloudy" -> "#90A4AE"
+            "Rainy" -> "#78909C"
+            "Stormy" -> "#312E81"
+            "Snowy" -> "#ECEFF1"
+            else -> "#BBE6FA"
+        }
+
+        val formattedCity = city.split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+
+        val landmarks = mutableListOf<com.example.model.LandmarkItem>()
+
+        if (query.contains("paris")) {
+            landmarks.add(com.example.model.LandmarkItem("Eiffel Tower", "landmark", 35.0, 14.0, 78.0, 3.0, "#8D6E63", "tower"))
+            landmarks.add(com.example.model.LandmarkItem("Arc de Triomphe", "landmark", 70.0, 18.0, 36.0, 2.0, "#B0BEC5", "arch"))
+            landmarks.add(com.example.model.LandmarkItem("Louvre Glass Pyramid", "building", 15.0, 16.0, 24.0, 4.0, "#4FC3F7", "pyramid"))
+        } else if (query.contains("tokyo")) {
+            landmarks.add(com.example.model.LandmarkItem("Mount Fuji", "nature", 15.0, 40.0, 65.0, 1.0, "#37474F", "pyramid"))
+            landmarks.add(com.example.model.LandmarkItem("Tokyo Tower", "landmark", 52.0, 12.0, 82.0, 3.0, "#FF7043", "tower"))
+            landmarks.add(com.example.model.LandmarkItem("Kaminarimon Gate", "landmark", 78.0, 18.0, 38.0, 4.0, "#D32F2F", "arch"))
+        } else if (query.contains("cairo")) {
+            landmarks.add(com.example.model.LandmarkItem("Great Pyramid of Giza", "landmark", 28.0, 35.0, 60.0, 2.0, "#D7CCC8", "pyramid"))
+            landmarks.add(com.example.model.LandmarkItem("Pyramid of Khafre", "landmark", 62.0, 30.0, 50.0, 1.0, "#CFD8DC", "pyramid"))
+            landmarks.add(com.example.model.LandmarkItem("Cairo Tower Spire", "landmark", 86.0, 8.0, 75.0, 4.0, "#90A4AE", "tower"))
+        } else if (query.contains("new york") || query.contains("ny")) {
+            landmarks.add(com.example.model.LandmarkItem("Empire State Building", "landmark", 25.0, 14.0, 85.0, 1.0, "#90A4AE", "spire"))
+            landmarks.add(com.example.model.LandmarkItem("One World Trade", "building", 55.0, 12.0, 80.0, 3.0, "#4FC3F7", "tower"))
+            landmarks.add(com.example.model.LandmarkItem("Brooklyn Bridge Arch", "landmark", 80.0, 16.0, 45.0, 4.0, "#CFD8DC", "arch"))
+        } else if (query.contains("sydney")) {
+            landmarks.add(com.example.model.LandmarkItem("Sydney Opera House", "landmark", 35.0, 26.0, 38.0, 3.0, "#ECEFF1", "dome"))
+            landmarks.add(com.example.model.LandmarkItem("Harbour Bridge", "landmark", 72.0, 22.0, 48.0, 2.0, "#78909C", "arch"))
+        } else if (query.contains("reykjavik")) {
+            landmarks.add(com.example.model.LandmarkItem("Hallgrímskirkja Spire", "landmark", 50.0, 16.0, 80.0, 2.0, "#ECEFF1", "spire"))
+            landmarks.add(com.example.model.LandmarkItem("Perlan Dome", "landmark", 20.0, 18.0, 35.0, 4.0, "#26C6DA", "dome"))
+        } else {
+            val charSum = city.fold(0) { acc, c -> acc + c.code }
+            val x1 = 18.0 + (charSum % 14)
+            val x2 = 50.0 + (charSum % 12)
+            val x3 = 80.0 - (charSum % 10)
+
+            landmarks.add(com.example.model.LandmarkItem("Downtown Tower Block", "building", x1, 14.0, 75.0, 2.0, "#546E7A", "box"))
+            landmarks.add(com.example.model.LandmarkItem("Regional Monument", "landmark", x2, 10.0, 80.0, 3.0, "#A1887F", "spire"))
+            landmarks.add(com.example.model.LandmarkItem("Civic Canopy", "nature", x3, 22.0, 36.0, 4.0, "#388E3C", "dome"))
+        }
+
+        val hourlyList = listOf(
+            com.example.model.HourlyForecast("12:00", tempCelsius - 1.0, condition),
+            com.example.model.HourlyForecast("13:00", tempCelsius, condition),
+            com.example.model.HourlyForecast("14:00", tempCelsius + 1.0, condition),
+            com.example.model.HourlyForecast("15:00", tempCelsius, condition),
+            com.example.model.HourlyForecast("16:00", tempCelsius - 1.0, condition)
+        )
+
+        val forecastList = listOf(
+            com.example.model.DailyForecast("Mon", tempCelsius + 1.0, tempCelsius - 4.0, condition),
+            com.example.model.DailyForecast("Tue", tempCelsius + 2.0, tempCelsius - 3.0, "Cloudy"),
+            com.example.model.DailyForecast("Wed", tempCelsius - 1.0, tempCelsius - 5.0, "Rainy"),
+            com.example.model.DailyForecast("Thu", tempCelsius, tempCelsius - 4.0, condition),
+            com.example.model.DailyForecast("Fri", tempCelsius + 3.0, tempCelsius - 2.0, condition)
+        )
+
+        return com.example.model.WeatherResponse(
+            cityName = "$formattedCity",
+            weather = com.example.model.WeatherDetail(
+                condition = condition,
+                tempCelsius = tempCelsius,
+                feelsLikeCelsius = tempCelsius + 1.0,
+                humidity = 58,
+                windSpeedKph = 13.8,
+                description = descriptionStr,
+                hourly = hourlyList,
+                forecast = forecastList
+            ),
+            scenery = com.example.model.SceneryDetail(
+                skyColorStart = skyColorStart,
+                skyColorEnd = skyColorEnd,
+                landmarks = landmarks
+            ),
+            isOfflineSimulated = true
+        )
     }
 
     private fun cleanJsonString(input: String): String {

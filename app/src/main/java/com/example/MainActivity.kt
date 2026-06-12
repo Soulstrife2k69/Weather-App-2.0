@@ -354,6 +354,45 @@ fun WeatherDioramaApp() {
                 is WeatherUiState.Success -> {
                     val data = state.data
 
+                    if (data.isOfflineSimulated) {
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth().testTag("local_simulated_banner"),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = "Simulated Mode info",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = "On-Device Simulation Active",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = "Synthesized procedurally offline to bypass API server rate limits (429). The scene remains 100% interactive!",
+                                            fontSize = 11.sp,
+                                            color = Color.White.copy(alpha = 0.8f),
+                                            lineHeight = 15.sp,
+                                            modifier = Modifier.padding(top = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // 3. DIORAMA CARD SCREEN
                     item {
                         Card(

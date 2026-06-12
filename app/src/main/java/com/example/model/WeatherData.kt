@@ -7,7 +7,8 @@ import com.squareup.moshi.JsonClass
 data class WeatherResponse(
     val cityName: String,
     val weather: WeatherDetail,
-    val scenery: SceneryDetail
+    val scenery: SceneryDetail,
+    val isOfflineSimulated: Boolean = false
 )
 
 @JsonClass(generateAdapter = true)
