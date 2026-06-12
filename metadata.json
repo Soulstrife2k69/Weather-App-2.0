@@ -1,0 +1,6 @@
+{
+  "name": "Diorama Weather",
+  "description": "Interactive 3D-perspective Weather Diorama built on a 2D Canvas with dynamic, AI-generated local scenery & landmarks.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
